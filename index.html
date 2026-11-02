@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#000000">
+  <title>Niaa🩷</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body {
+      width: 100%; height: 100%; margin: 0; overflow: hidden;
+      background: #000; color: #fff;
+      font-family: Arial, Helvetica, sans-serif;
+    }
+    canvas { display: block; width: 100%; height: 100%; }
+    #musicButton {
+      position: fixed; left: 50%; bottom: max(22px, env(safe-area-inset-bottom));
+      transform: translateX(-50%);
+      border: 1px solid rgba(100,149,237,.65);
+      border-radius: 999px; padding: 11px 19px;
+      background: rgba(0, 12, 30, .72); color: #dceaff;
+      font-size: 14px; letter-spacing: .04em;
+      box-shadow: 0 0 18px rgba(30,144,255,.24);
+      cursor: pointer; backdrop-filter: blur(8px);
+    }
+    #musicButton:hover { background: rgba(15,45,85,.9); }
+    #musicButton:focus-visible { outline: 2px solid #87cefa; outline-offset: 4px; }
+  </style>
+</head>
+<body>
+  <canvas id="scene" aria-label="Animasi partikel membentuk hati biru dengan tulisan Love You"></canvas>
+  <audio id="music" src="./love_you.mp3" preload="auto" loop></audio>
+  <button id="musicButton" type="button">♫ Putar musik</button>
+
+  <script>
+    (() => {
+      const canvas = document.getElementById("scene");
+      const ctx = canvas.getContext("2d");
+      const audio = document.getElementById("music");
+      const musicButton = document.getElementById("musicButton");
+
+      const WORDS = ["love you", "Love You", "LOVE YOU"];
+      const COLORS = ["#4682b4", "#1e90ff", "#00bfff", "#6495ed", "#4169e1"];
+      const particles = [];
+      let width = 0, height = 0, dpr = 1, startTime = 0;
+      let outlineSpan = 0, fillStartFrame = 0;
+      const TAU = Math.PI * 2;
+
+      function heartXY(t) {
+        const x = 16 * Math.pow(Math.sin(t), 3);
+        const y = 13 * Math.cos(t) - 5 * Math.cos(2*t)
+                - 2 * Math.cos(3*t) - Math.cos(4*t);
+        return [x, -y];
+      }
+
+      function rand(min, max) { return min + Math.random() * (max - min); }
+
+      function heartPoint(t, scale) {
+        const [x, y] = heartXY(t);
+        return [width / 2 + x * scale, height / 2 + y * scale];
+      }
+
+      function addParticle(x, y, order, kind) {
+        particles.push({
+          x, y, order, kind,
+          word: WORDS[Math.floor(Math.random() * WORDS.length)],
+          color: COLORS[Math.floor(Math.random() * COLORS.length)],
+          alpha: 0,
+          flicker: rand(0, TAU),
+          delay: 0,
+          size: rand(0.85, 1.15)
+        });
+      }
+
+      function buildParticles() {
+        particles.length = 0;
+        const scale = Math.min(width / 43, height / 35, 24);
+        const placedOutline = [];
+        const outlineCount = 160;
+
+        for (let i = 0; i < outlineCount; i++) {
+          const [x, y] = heartPoint((i / outlineCount) * TAU, scale);
+          if (placedOutline.some(([px, py]) => Math.hypot(x-px, y-py) < Math.max(7, scale*1.5))) continue;
+          placedOutline.push([x, y]);
+          addParticle(x, y, i, "outline");
+        }
+
+        outlineSpan = particles.reduce((m, p) => Math.max(m, p.order), 0);
+        const fillStart = Math.floor(outlineSpan * 1.6) + 30;
+        fillStartFrame = fillStart + 200;
+
+        const placedFill = [];
+        let attempts = 0;
+        while (placedFill.length < 130 && attempts < 130 * 80) {
+          attempts++;
+          const t = rand(0, TAU), r = rand(0, 0.86);
+          const [bx, by] = heartXY(t);
+          const x = width/2 + bx*r*scale;
+          const y = height/2 + by*r*scale;
+          if (placedFill.some(([px, py]) => Math.hypot(x-px, y-py) < Math.max(7, scale*2.3))) continue;
+          placedFill.push([x, y]);
+          addParticle(x, y, Math.floor(rand(0, 321)), "fill");
+        }
+
+        for (const p of particles) {
+          p.delay = p.kind === "outline" ? Math.floor(p.order * 1.6) : fillStart + p.order;
+        }
+      }
+
+      function resize() {
+        dpr = Math.min(window.devicePixelRatio || 1, 2);
+        width = window.innerWidth;
+        height = window.innerHeight;
+        canvas.width = Math.round(width * dpr);
+        canvas.height = Math.round(height * dpr);
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        buildParticles();
+        startTime = performance.now();
+      }
+
+      function drawGlowText(text, x, y, color, alpha, size, weight = 700) {
+        if (alpha <= 0) return;
+        ctx.save();
+        ctx.globalAlpha = alpha / 255;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.font = `${weight} ${size}px Arial, Helvetica, sans-serif`;
+        ctx.shadowColor = color;
+        ctx.shadowBlur = size * 0.9;
+        ctx.fillStyle = color;
+        ctx.fillText(text, x, y);
+        ctx.shadowBlur = size * 0.35;
+        ctx.fillText(text, x, y);
+        ctx.restore();
+      }
+
+      function animate(now) {
+        const frame = (now - startTime) / (1000 / 60);
+        ctx.clearRect(0, 0, width, height);
+        ctx.fillStyle = "#000";
+        ctx.fillRect(0, 0, width, height);
+
+        for (const p of particles) {
+          if (frame > p.delay && p.alpha < 255) {
+            p.alpha = Math.min(255, p.alpha + 14.8);
+          }
+          if (p.alpha <= 0) continue;
+          const flicker = p.alpha >= 255
+            ? 0.75 + 0.25 * Math.sin(frame * 0.04 + p.flicker) : 1;
+          const fontSize = (p.kind === "outline" ? 11 : 9) * p.size;
+          drawGlowText(p.word, p.x, p.y, p.color, p.alpha * flicker, fontSize);
+        }
+
+        if (frame > fillStartFrame) {
+          const progress = Math.min(1, (frame - fillStartFrame) / 60);
+          const alpha = 255 * (1 - Math.exp(-progress * 8));
+          const pulse = 1 + 0.025 * Math.sin(frame * 0.05);
+          const centerSize = Math.max(25, Math.min(54, width * 0.042)) * pulse;
+          drawGlowText("Love You", width/2, height/2, "#fffaf5", alpha, centerSize, 700);
+        }
+
+        requestAnimationFrame(animate);
+      }
+
+      function setMusicButton(text) {
+        musicButton.textContent = text;
+      }
+
+      async function playMusic() {
+        try {
+          // Pastikan browser mengambil file dari lokasi yang sama dengan index.html.
+          if (audio.error) {
+            throw new Error("audio-file-error");
+          }
+          await audio.play();
+          setMusicButton("♫ Matikan musik");
+          return true;
+        } catch (error) {
+          // Pesan spesifik jika file tidak ditemukan / gagal dimuat.
+          if (audio.error && audio.error.code === 4) {
+            setMusicButton("File love_you.mp3 tidak ditemukan");
+          } else if (audio.error) {
+            setMusicButton("File musik gagal dimuat");
+          } else {
+            setMusicButton("Sentuh layar untuk memutar musik");
+          }
+          return false;
+        }
+      }
+
+      musicButton.addEventListener("click", async () => {
+        if (audio.paused) {
+          await playMusic();
+        } else {
+          audio.pause();
+          setMusicButton("♫ Putar musik");
+        }
+      });
+
+      audio.addEventListener("error", () => {
+        setMusicButton("File love_you.mp3 tidak ditemukan");
+      });
+
+      audio.addEventListener("playing", () => {
+        setMusicButton("♫ Matikan musik");
+      });
+
+      // Coba autoplay. Jika browser memblokir suara, interaksi pertama
+      // (sentuhan/klik/tekan tombol) akan mencoba memutarnya lagi.
+      playMusic();
+
+      function startAfterInteraction() {
+        if (audio.paused) playMusic();
+        document.removeEventListener("pointerdown", startAfterInteraction);
+        document.removeEventListener("keydown", startAfterInteraction);
+      }
+      document.addEventListener("pointerdown", startAfterInteraction, { once: true });
+      document.addEventListener("keydown", startAfterInteraction, { once: true });
+
+      window.addEventListener("resize", resize);
+      resize();
+      requestAnimationFrame(animate);
+    })();
+  </script>
+</body>
+</html>
